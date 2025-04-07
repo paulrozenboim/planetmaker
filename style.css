@@ -1,0 +1,90 @@
+/* Basic body and canvas styling */
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: 'Inter', sans-serif; /* Use Inter font */
+    background-color: #111; /* Dark background */
+    color: #eee; /* Light text color */
+}
+
+canvas {
+    display: block; /* Remove extra space below canvas */
+}
+
+/* Styling for lil-gui panel */
+.lil-gui {
+    font-size: 14px !important;
+    width: 300px !important; /* Control panel width */
+    --widget-padding: 6px !important;
+    --title-background: #2d3748 !important; /* Tailwind gray-800 */
+    --background-color: rgba(17, 24, 39, 0.85) !important; /* Tailwind gray-900 with opacity */
+    --text-color: #e5e7eb !important; /* Tailwind gray-200 */
+    --widget-color: #4b5563 !important; /* Tailwind gray-600 */
+    --hover-color: #6b7280 !important; /* Tailwind gray-500 */
+    --focus-color: #9ca3af !important; /* Tailwind gray-400 */
+    --number-color: #60a5fa !important; /* Tailwind blue-400 */
+    --string-color: #a78bfa !important; /* Tailwind violet-400 */
+    --boolean-on-color: #34d399 !important; /* Tailwind emerald-500 */
+    --boolean-off-color: #6b7280 !important; /* Tailwind gray-500 */
+}
+
+.lil-gui .title {
+     color: #f9fafb !important; /* Tailwind gray-50 */
+     font-weight: 600; /* Semi-bold title */
+}
+
+/* Add border between folders */
+.lil-gui.root > .children > .lil-gui > .title {
+    border-top: 1px solid #4b5563; /* Tailwind gray-600 */
+}
+
+.lil-gui .name {
+    color: #d1d5db; /* Tailwind gray-300 for labels */
+}
+
+.lil-gui .widget {
+     border-radius: 4px; /* Rounded widgets */
+}
+
+/* Input field styling */
+.lil-gui input[type="text"], .lil-gui input[type="number"] {
+    background-color: #374151; /* Tailwind gray-700 */
+    border: 1px solid #4b5563; /* Tailwind gray-600 */
+    color: #e5e7eb; /* Tailwind gray-200 */
+    border-radius: 3px;
+    padding: 3px 5px;
+}
+
+/* Color picker styling */
+.lil-gui .color .display {
+    border-radius: 3px;
+    border: 1px solid #4b5563; /* Tailwind gray-600 */
+}
+
+/* General button styling within lil-gui */
+.lil-gui button {
+    background-color: #3b82f6 !important; /* Tailwind blue-500 */
+    color: white !important;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px !important;
+    text-align: center;
+    transition: background-color 0.2s;
+    width: 100%; /* Make buttons fill width */
+    margin-top: 5px !important;
+    cursor: pointer;
+}
+
+.lil-gui button:hover {
+    background-color: #2563eb !important; /* Tailwind blue-600 */
+}
+
+ /* Style specifically for export buttons */
+.lil-gui .export-button button {
+     background-color: #10b981 !important; /* Tailwind Emerald-500 */
+     margin-top: 8px !important; /* Add some space above export buttons */
+}
+
+ .lil-gui .export-button button:hover {
+     background-color: #059669 !important; /* Tailwind Emerald-600 */
+}

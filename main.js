@@ -13,17 +13,17 @@ let rt1, rt2; // Render targets for ping-ponging simulation
 let quadScene, quadCamera; // Helper scene for rendering simulation steps
 
 // --- Constants ---
-const TEXTURE_WIDTH = 512; // Width of the simulation texture
-const TEXTURE_HEIGHT = 256; // Height (2:1 aspect ratio good for spheres)
+const TEXTURE_WIDTH = 1024; // Width of the simulation texture
+const TEXTURE_HEIGHT = 512; // Height (2:1 aspect ratio good for spheres)
 const SIMULATION_STEPS_PER_FRAME = 5; // Number of simulation steps per display frame
-const SPHERE_SEGMENTS_W = 128; // Sphere horizontal segments (for detail)
-const SPHERE_SEGMENTS_H = 64;  // Sphere vertical segments (for detail)
+const SPHERE_SEGMENTS_W = 360; // Sphere horizontal segments (for detail)
+const SPHERE_SEGMENTS_H = 360;  // Sphere vertical segments (for detail)
 
 // --- Parameters Object (for GUI controls) ---
 const params = {
     // Simulation parameters
     feed: 0.0367, // Feed rate (f) for Gray-Scott model
-    kill: 0.0649, // Kill rate (k) for Gray-Scott model
+    kill: 0.0549, // Kill rate (k) for Gray-Scott model
     diffA: 1.0,   // Diffusion rate for chemical A
     diffB: 0.5,   // Diffusion rate for chemical B
     timeStep: 1.0,// Timestep multiplier for simulation speed

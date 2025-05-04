@@ -22,8 +22,8 @@ const SPHERE_SEGMENTS_H = 360;  // Sphere vertical segments (for detail)
 // --- Parameters Object (for GUI controls) ---
 const params = {
     // Simulation parameters
-    feed: 0.0367, // Feed rate (f) for Gray-Scott model
-    kill: 0.0549, // Kill rate (k) for Gray-Scott model
+    feed: 0.03, // Feed rate (f) for Gray-Scott model
+    kill: 0.06, // Kill rate (k) for Gray-Scott model
     diffA: 1.0,   // Diffusion rate for chemical A
     diffB: 0.5,   // Diffusion rate for chemical B
     timeStep: 1.0,// Timestep multiplier for simulation speed
@@ -43,7 +43,7 @@ const params = {
 
 // --- Simulation Presets ---
 const presets = {
-     'Mitosis': { feed: 0.0367, kill: 0.0649 },
+     'Mitosis': { feed: 0.03, kill: 0.06 },
      'Coral Growth': { feed: 0.0545, kill: 0.062 },
      'Worms': { feed: 0.026, kill: 0.051 },
      'Waves': { feed: 0.014, kill: 0.054 },

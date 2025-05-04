@@ -11,15 +11,13 @@ let controls;
 let rdMaterial, displayMaterial;
 let rt1, rt2; // Render targets for ping-ponging simulation
 let quadScene, quadCamera; // Helper scene for rendering simulation steps
-let isSimulating = true; // Add this line: controls simulation state
-
 
 // --- Constants ---
 const TEXTURE_WIDTH = 1024; // Width of the simulation texture
 const TEXTURE_HEIGHT = 512; // Height (2:1 aspect ratio good for spheres)
-const SIMULATION_STEPS_PER_FRAME = 5; // Number of simulation steps per display frame
-const SPHERE_SEGMENTS_W = 360; // Sphere horizontal segments (for detail)
-const SPHERE_SEGMENTS_H = 360;  // Sphere vertical segments (for detail)
+const SIMULATION_STEPS_PER_FRAME = 8; // Increase for smoother evolution
+const SPHERE_SEGMENTS_W = 256; // Adjust based on performance needs
+const SPHERE_SEGMENTS_H = 256;
 
 // --- Parameters Object (for GUI controls) ---
 const params = {
@@ -30,6 +28,7 @@ const params = {
     diffB: 0.5,   // Diffusion rate for chemical B
     timeStep: 1.0,// Timestep multiplier for simulation speed
     preset: 'Mitosis', // Default preset name
+    smoothness: 0.5, // Default value between 0 and 1
 
     // Display parameters
     color1: '#1a3b80', // First color for mapping RD values
@@ -39,30 +38,108 @@ const params = {
 
     // Actions (linked to functions)
     reset: resetSimulation,
-    function playSimulation() {
-    isSimulating = true;
-    console.log("Simulation Playing");
-    // Optionally, update button appearance here if needed
-}
-
-function pauseSimulation() {
-    isSimulating = false;
-    console.log("Simulation Paused");
-    // Optionally, update button appearance here if needed
-}
     savePNG: savePNG,
-    saveGLTF: saveGLTF
+    saveGLTF: saveGLTF,
+    isPlaying: true, // New parameter for play/pause state
+    togglePlayPause: function() {
+        this.isPlaying = !this.isPlaying;
+        updatePlayPauseButton();
+    }
 };
 
 // --- Simulation Presets ---
 const presets = {
-     'Mitosis': { feed: 0.03, kill: 0.06 },
-     'Coral Growth': { feed: 0.0545, kill: 0.062 },
-     'Worms': { feed: 0.026, kill: 0.051 },
-     'Waves': { feed: 0.014, kill: 0.054 },
-     'Solitons': { feed: 0.025, kill: 0.06 },
-     'Chaos': { feed: 0.039, kill: 0.058 },
-     'Zebra': { feed: 0.029, kill: 0.057 },
+    'Mitosis': { 
+        feed: 0.03, 
+        kill: 0.06, 
+        diffA: 1.0, 
+        diffB: 0.5,
+        timeStep: 1.0,
+        smoothness: 0.0, // Sharp cell-like boundaries
+        colors: {
+            color1: '#1a3b80',
+            color2: '#e6cc33',
+            color3: '#1a1a1a'
+        }
+    },
+    'Coral Growth': { 
+        feed: 0.0545, 
+        kill: 0.062, 
+        diffA: 1.0, 
+        diffB: 0.5,
+        timeStep: 1.0,
+        smoothness: 0.4, // Smoother for organic look
+        colors: {
+            color1: '#ff6b6b',
+            color2: '#48dbfb',
+            color3: '#341f97'
+        }
+    },
+    'Worms': { 
+        feed: 0.026, 
+        kill: 0.051, 
+        diffA: 1.0, 
+        diffB: 0.5,
+        timeStep: 1.0,
+        smoothness: 0.3,
+        colors: {
+            color1: '#8B4513', // Saddle brown
+            color2: '#D2691E', // Chocolate
+            color3: '#3D1F00'  // Dark brown
+        }
+    },
+    'Waves': { 
+        feed: 0.017,    // Updated from 0.014
+        kill: 0.045,    // Updated from 0.054
+        diffA: 1.27,    // Updated from 1.0
+        diffB: 0.56,    // Updated from 0.5
+        timeStep: 0.81, // Updated from 1.0
+        smoothness: 0.6,
+        colors: {
+            color1: '#0984e3', // Ocean blue
+            color2: '#00cec9', // Teal
+            color3: '#2d3436'  // Dark slate
+        }
+    },
+    'Solitons': { 
+        feed: 0.025, 
+        kill: 0.06, 
+        diffA: 1.0, 
+        diffB: 0.5,
+        timeStep: 1.0,
+        smoothness: 0.2, // Light smoothing for distinct patterns
+        colors: {
+            color1: '#e056fd',
+            color2: '#f9ca24',
+            color3: '#2c2c54'
+        }
+    },
+    'Chaos': { 
+        feed: 0.039,    // Same as provided
+        kill: 0.058,    // Same as provided
+        diffA: 1.0,     // Updated to 1
+        diffB: 0.55,    // Updated to 0.55
+        timeStep: 1.02, // Updated to 1.02
+        smoothness: 0.1,
+        colors: {
+            color1: '#39FF14', // Neon green
+            color2: '#B026FF', // Neon purple
+            color3: '#0D0D0D'  // Very dark gray/black for contrast
+        }
+    },
+    'Zebra': { 
+        feed: 0.029, 
+        kill: 0.057, 
+        diffA: 1.0, 
+        diffB: 0.5,
+        timeStep: 1.0,
+        smoothness: 0.5,
+        colors: {
+            color1: '#2d3436', // Dark gray (inverted from white)
+            color2: '#ffffff', // White (inverted from dark gray)
+            color3: '#636e72'  // Medium gray stays as transition color
+        }
+    }
 };
 
 
@@ -146,96 +223,107 @@ const rdFragmentShader = `
 
 // Vertex shader for the planet sphere (includes displacement)
 const displayVertexShader = `
-    varying vec2 vUv; // Pass UV to fragment shader
-    varying vec3 vNormal; // Pass normal vector for lighting
+    varying vec2 vUv;
+    varying vec3 vNormal;
 
-    uniform sampler2D tDiffuse; // Reaction-diffusion texture (A=r, B=g)
-    uniform float u_displacementScale; // How much to displace vertices
+    uniform sampler2D tDiffuse;
+    uniform float u_displacementScale;
+    uniform float u_smoothness;
 
     void main() {
-        vUv = uv; // Pass the vertex's original UV coordinates
+        vUv = uv;
+        
+        // Sample the main texel
+        vec2 state = texture2D(tDiffuse, uv).rg;
+        
+        // Sample neighboring texels for smoother interpolation
+        vec2 texelSize = vec2(1.0/1024.0, 1.0/512.0); // Based on your TEXTURE_WIDTH and TEXTURE_HEIGHT
+        
+        // Sample 4 adjacent points
+        vec2 stateRight = texture2D(tDiffuse, vUv + vec2(texelSize.x, 0.0)).rg;
+        vec2 stateLeft = texture2D(tDiffuse, vUv + vec2(-texelSize.x, 0.0)).rg;
+        vec2 stateTop = texture2D(tDiffuse, vUv + vec2(0.0, texelSize.y)).rg;
+        vec2 stateBottom = texture2D(tDiffuse, vUv + vec2(0.0, -texelSize.y)).rg;
+        
+        // Average the displacement values
+        float mainDisp = (state.r - state.g);
+        float rightDisp = (stateRight.r - stateRight.g);
+        float leftDisp = (stateLeft.r - stateLeft.g);
+        float topDisp = (stateTop.r - stateTop.g);
+        float bottomDisp = (stateBottom.r - stateBottom.g);
+        
+        // Weighted average for smoother displacement
+        float displacement = (mainDisp + rightDisp + leftDisp + topDisp + bottomDisp) / 5.0;
+        
+        // Apply smoothness
+        displacement = mix(displacement, smoothstep(-1.0, 1.0, displacement), u_smoothness);
+        
+        // Apply displacement scale
+        displacement *= u_displacementScale;
 
-        // Sample the reaction-diffusion texture at this vertex's UV
-        vec2 state = texture2D(tDiffuse, uv).rg; // A = state.r, B = state.g
-
-        // --- Calculate Displacement ---
-        // Formula: (A - B) * scale. This enhances edges where A is high and B is low.
-        // Other formulas are possible (e.g., just state.r, or state.g * scale)
-        float displacement = (state.r - state.g) * u_displacementScale;
-
-        // --- Apply Displacement ---
-        // Move the vertex position outwards/inwards along its normal vector
+        // Apply displacement
         vec3 displacedPosition = position + normal * displacement;
-
-        // --- Calculate Normal for Lighting ---
-        // We pass the *original* normal. Recalculating the displaced normal
-        // is complex and often not necessary for visual appeal.
-        vNormal = normalize(normalMatrix * normal); // Transform normal to view space
-
-        // --- Final Vertex Position ---
-        // Project the *displaced* position to screen space
+        
+        vNormal = normalize(normalMatrix * normal);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
     }
 `;
 
 // Fragment shader to display the RD texture colorfully on the sphere
 const displayFragmentShader = `
-    varying vec2 vUv; // Received UV coordinates
-    varying vec3 vNormal; // Received normal vector (view space)
+    varying vec2 vUv;
+    varying vec3 vNormal;
 
-    uniform sampler2D tDiffuse; // Reaction-diffusion texture
-    uniform float time; // Time uniform (can be used for subtle animations)
-
-    // Controllable colors passed from JavaScript
+    uniform sampler2D tDiffuse;
+    uniform float time;
     uniform vec3 u_color1;
     uniform vec3 u_color2;
     uniform vec3 u_color3;
 
     void main() {
-        // Sample the RD state (A, B) at this fragment's UV
-        vec2 state = texture2D(tDiffuse, vUv).rg; // A = state.r, B = state.g
+        // Sample the RD state with bilinear filtering
+        vec2 state = texture2D(tDiffuse, vUv).rg;
+        
+        // Smooth the color mixing factor
+        float mixVal = smoothstep(0.3, 0.7, state.r - state.g * 0.5);
+        vec3 color = mix(u_color1, u_color2, mixVal);
+        color = mix(color, u_color3, smoothstep(0.1, 0.3, state.g));
 
-        // --- Color Mapping ---
-        // Map the A and B values to colors using the uniforms.
-        // This example mixes between color1 and color2 based on (A - B/2),
-        // then mixes with a base color3 based on B.
-        float mixVal = smoothstep(0.3, 0.7, state.r - state.g * 0.5); // Create a mix factor
-        vec3 color = mix(u_color1, u_color2, mixVal); // Interpolate between color1 and color2
-        color = mix(color, u_color3, smoothstep(0.1, 0.3, state.g)); // Interpolate with base color
+        // Enhance lighting calculation
+        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+        float diffuse = max(0.0, dot(vNormal, lightDir)) * 0.7 + 0.3;
+        
+        // Apply lighting with gamma correction
+        vec3 finalColor = color * diffuse;
+        finalColor = pow(finalColor, vec3(0.4545)); // Gamma correction
 
-        // --- Lighting (Simple Lambertian Diffuse) ---
-        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0)); // Define light direction (view space)
-        // Calculate diffuse lighting intensity based on surface normal and light direction
-        float diffuse = max(0.0, dot(vNormal, lightDir)) * 0.7 + 0.3; // Add ambient term (0.3)
-
-        // Final color is the mapped color modulated by lighting
-        gl_FragColor = vec4(color * diffuse, 1.0); // Set fragment color (alpha = 1.0)
+        gl_FragColor = vec4(finalColor, 1.0);
     }
 `;
 
 // --- Initialization Function ---
 function init() {
-    // ---  ---
-     = new THREE.();
+    // --- Scene ---
+    scene = new THREE.Scene();
 
     // --- Camera ---
     camera = new THREE.PerspectiveCamera(
-        75, // Field of view
-        window.innerWidth / window.innerHeight, // Aspect ratio
-        0.1, // Near clipping plane
-        1000 // Far clipping plane
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
     );
-    camera.position.z = 2.5; // Move camera back slightly
+    camera.position.set(0, 0, 2.5); // Move camera directly in front
 
     // --- Renderer ---
     renderer = new THREE.WebGLRenderer({
-        antialias: true, // Enable anti-aliasing
-        preserveDrawingBuffer: true // Needed for savePNG functionality
+        antialias: true,
+        preserveDrawingBuffer: true
     });
-    renderer.setSize(window.innerWidth, window.innerHeight); // Set size to full window
-    renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI displays
-    renderer.outputColorSpace = THREE.SRGBColorSpace; // Use correct color space for display
-    document.getElementById('container').appendChild(renderer.domElement); // Add canvas to DOM
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.getElementById('container').appendChild(renderer.domElement);
 
     // --- Lighting ---
     const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4); // Soft white ambient light
@@ -254,10 +342,13 @@ function init() {
     // --- Render Targets for Simulation ---
     // We need two render targets to ping-pong between simulation steps
     const rtOptions = {
-        minFilter: THREE.LinearFilter, // How to sample when texture is smaller
-        magFilter: THREE.LinearFilter, // How to sample when texture is larger
-        format: THREE.RGBAFormat,      // Store Red, Green, Blue, Alpha channels
-        type: THREE.FloatType          // Use floating point for precision needed in simulation
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+        type: THREE.FloatType,
+        wrapS: THREE.RepeatWrapping,
+        wrapT: THREE.RepeatWrapping,
+        generateMipmaps: false
     };
     rt1 = new THREE.WebGLRenderTarget(TEXTURE_WIDTH, TEXTURE_HEIGHT, rtOptions);
     rt2 = new THREE.WebGLRenderTarget(TEXTURE_WIDTH, TEXTURE_HEIGHT, rtOptions);
@@ -295,7 +386,8 @@ function init() {
             u_color2: { value: new THREE.Color(params.color2) },
             u_color3: { value: new THREE.Color(params.color3) },
             // Initialize displacement uniform
-            u_displacementScale: { value: params.displacementScale }
+            u_displacementScale: { value: params.displacementScale },
+            u_smoothness: { value: params.smoothness },
         },
         vertexShader: displayVertexShader,   // Use the vertex shader with displacement
         fragmentShader: displayFragmentShader, // Use the fragment shader for coloring/lighting
@@ -303,11 +395,14 @@ function init() {
     });
 
     // --- Planet Geometry ---
-    // Use the defined segment constants for high detail
-    const planetGeometry = new THREE.SphereGeometry(1, SPHERE_SEGMENTS_W, SPHERE_SEGMENTS_H);
-    planetMesh = new THREE.Mesh(planetGeometry, displayMaterial); // Combine geometry and material
-    scene.add(planetMesh); // Add the planet to the main scene
-    planetMesh.rotation.y = Math.PI; // Rotate 180 degrees (PI radians) around Y
+    const planetGeometry = new THREE.SphereGeometry(
+        1,                    // radius
+        SPHERE_SEGMENTS_W,    // widthSegments
+        SPHERE_SEGMENTS_H     // heightSegments
+    );
+    planetMesh = new THREE.Mesh(planetGeometry, displayMaterial);
+    planetMesh.rotation.y = 4.7; // NOW we can rotate it, after creating it
+    scene.add(planetMesh);
 
     // --- Initialize Simulation Texture ---
     resetSimulation(); // Set the initial state of the RD texture
@@ -389,24 +484,76 @@ function setupGUI() {
     const gui = new GUI(); // Create the main GUI panel
     gui.title("Planet Controls"); // Set panel title
 
+    // Create custom play/pause button
+    const playbackFolder = gui.addFolder('Playback');
+    const playbackController = playbackFolder.add(params, 'togglePlayPause');
+    
+    // Style the button
+    const button = playbackController.domElement.querySelector('button');
+    button.classList.add('play-pause-button');
+    button.style.cssText = `
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 8px;
+        background: var(--focus-color);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    `;
+    
+    // Set initial icon
+    updatePlayPauseButton();
+    
+    playbackFolder.open();
+
     // --- Simulation Folder ---
     const simFolder = gui.addFolder('Simulation Parameters'); // Create a folder
     simFolder.add(params, 'preset', Object.keys(presets)).name('Preset').onChange(value => {
-        // When preset changes, update params and reset simulation
         const presetParams = presets[value];
         if (presetParams) {
+            // Update simulation parameters
             params.feed = presetParams.feed;
             params.kill = presetParams.kill;
-            // Update the GUI sliders visually
-            simFolder.controllers.forEach(c => {
-                if (c.property === 'feed' || c.property === 'kill') {
-                     c.updateDisplay(); // Reflect change in slider position
-                }
+            params.diffA = presetParams.diffA;
+            params.diffB = presetParams.diffB;
+            params.timeStep = presetParams.timeStep;
+            params.smoothness = presetParams.smoothness;
+
+            // Update colors
+            if (presetParams.colors) {
+                params.color1 = presetParams.colors.color1;
+                params.color2 = presetParams.colors.color2;
+                params.color3 = presetParams.colors.color3;
+            }
+
+            // Update all GUI controllers
+            gui.controllers.forEach(c => {
+                c.updateDisplay();
             });
-            // Update the actual shader uniforms
+            gui.folders.forEach(folder => {
+                folder.controllers.forEach(c => {
+                    c.updateDisplay();
+                });
+            });
+
+            // Update shader uniforms
             rdMaterial.uniforms.feed.value = params.feed;
             rdMaterial.uniforms.kill.value = params.kill;
-            resetSimulation(); // Reset the texture state
+            rdMaterial.uniforms.diffA.value = params.diffA;
+            rdMaterial.uniforms.diffB.value = params.diffB;
+            rdMaterial.uniforms.timeStep.value = params.timeStep;
+            
+            // Update material colors
+            displayMaterial.uniforms.u_color1.value.set(params.color1);
+            displayMaterial.uniforms.u_color2.value.set(params.color2);
+            displayMaterial.uniforms.u_color3.value.set(params.color3);
+            displayMaterial.uniforms.u_smoothness.value = params.smoothness;
+
+            resetSimulation();
         }
     });
     // Add sliders for simulation parameters, linking them to shader uniforms via onChange
@@ -416,14 +563,6 @@ function setupGUI() {
     simFolder.add(params, 'diffB', 0.1, 1.0, 0.01).name('Diffusion B (Db)').onChange(v => rdMaterial.uniforms.diffB.value = v);
     simFolder.add(params, 'timeStep', 0.5, 1.5, 0.01).name('Time Step (dt)').onChange(v => rdMaterial.uniforms.timeStep.value = v);
     simFolder.add(params, 'reset').name('Reset Simulation'); // Button to call resetSimulation
-   
-    // Add Play/Pause to params object first
-params.play = playSimulation;
-params.pause = pauseSimulation;
-
-// Then add buttons to GUI
-simFolder.add(params, 'play').name('Play ▶');
-simFolder.add(params, 'pause').name('Pause ⏸');
     // simFolder.close(); // Optional: Start folder closed
 
     // --- Display Folder ---
@@ -434,6 +573,12 @@ simFolder.add(params, 'pause').name('Pause ⏸');
     displayFolder.addColor(params, 'color3').name('Base Color 3').onChange(v => displayMaterial.uniforms.u_color3.value.set(v));
     // Add slider for displacement scale
     displayFolder.add(params, 'displacementScale', 0.0, 0.5, 0.005).name('Displacement Scale').onChange(v => displayMaterial.uniforms.u_displacementScale.value = v);
+    // Add smoothness control to the Display Settings folder
+    displayFolder.add(params, 'smoothness', 0, 0.6, 0.01)
+        .name('Surface Smoothness')
+        .onChange(value => {
+            displayMaterial.uniforms.u_smoothness.value = value;
+        });
     // displayFolder.close(); // Optional: Start folder closed
 
     // --- Export Folder ---
@@ -592,45 +737,32 @@ function onWindowResize() {
 
 // --- Animation Loop ---
 function animate(time) {
-    // Request the next frame
     requestAnimationFrame(animate);
-
-    // Convert time to seconds (or use for other effects)
-    const dt = time * 0.0001;
-
-   // --- Run Simulation Steps (if simulating) ---
-if (isSimulating) { // <-- Add this check
-    renderer.autoClear = false;
-    for (let i = 0; i < SIMULATION_STEPS_PER_FRAME; i++) {
-        // Set the input texture for the simulation shader (current state is in rt1)
-        rdMaterial.uniforms.tPrev.value = rt1.texture;
-
-        // Render the simulation step to the *other* render target (rt2)
-        renderer.setRenderTarget(rt2);
-        renderer.clear();
-        renderer.render(quadScene, quadCamera);
-
-        // Swap render targets
-        const temp = rt1;
-        rt1 = rt2;
-        rt2 = temp;
+    
+    if (params.isPlaying) {
+        renderer.autoClear = false;
+        for (let i = 0; i < SIMULATION_STEPS_PER_FRAME; i++) {
+            rdMaterial.uniforms.tPrev.value = rt1.texture;
+            renderer.setRenderTarget(rt2);
+            renderer.clear();
+            renderer.render(quadScene, quadCamera);
+            
+            // Swap render targets
+            const temp = rt1;
+            rt1 = rt2;
+            rt2 = temp;
+        }
+        renderer.autoClear = true;
     }
-    renderer.autoClear = true;
-} // <-- Add closing brace for the check
 
-
-    // --- Render Main Scene ---
-    // Update the display material's texture uniform to the latest simulation result (in rt1)
     displayMaterial.uniforms.tDiffuse.value = rt1.texture;
-    displayMaterial.uniforms.time.value = dt; // Update time uniform if needed by shader
-
-    // Update camera controls (for damping)
+    displayMaterial.uniforms.time.value = time * 0.0001;
+    
     controls.update();
-
-    // Render the main scene (planet) to the screen (canvas)
-    renderer.setRenderTarget(null); // Ensure rendering goes to the canvas
-    renderer.clear(); // Clear the canvas
-    renderer.render(scene, camera); // Render the scene with the planet
+    
+    renderer.setRenderTarget(null);
+    renderer.clear();
+    renderer.render(scene, camera);
 }
 
 // --- Start the application ---
@@ -648,3 +780,13 @@ window.onload = () => {
         document.body.appendChild(errorDiv); // Display error message on screen
     }
 };
+
+// Add this function to handle button updates
+function updatePlayPauseButton() {
+    const playPauseButton = document.querySelector('.play-pause-button');
+    if (playPauseButton) {
+        const icon = params.isPlaying ? '⏸️' : '▶️';
+        playPauseButton.innerHTML = icon;
+        playPauseButton.title = params.isPlaying ? 'Pause' : 'Play';
+    }
+}

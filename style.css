@@ -13,19 +13,34 @@ canvas {
 
 /* Styling for lil-gui panel */
 .lil-gui {
-    font-size: 14px !important;
-    width: 300px !important; /* Control panel width */
-    --widget-padding: 6px !important;
-    --title-background: #2d3748 !important; /* Tailwind gray-800 */
-    --background-color: rgba(17, 24, 39, 0.85) !important; /* Tailwind gray-900 with opacity */
-    --text-color: #e5e7eb !important; /* Tailwind gray-200 */
-    --widget-color: #4b5563 !important; /* Tailwind gray-600 */
-    --hover-color: #6b7280 !important; /* Tailwind gray-500 */
-    --focus-color: #9ca3af !important; /* Tailwind gray-400 */
-    --number-color: #60a5fa !important; /* Tailwind blue-400 */
-    --string-color: #a78bfa !important; /* Tailwind violet-400 */
-    --boolean-on-color: #34d399 !important; /* Tailwind emerald-500 */
-    --boolean-off-color: #6b7280 !important; /* Tailwind gray-500 */
+    --widget-height: 32px !important;
+    --spacing: 8px !important;
+    --font-size: 14px !important;
+    --input-font-size: 14px !important;
+    --padding: 8px !important;
+    --widget-padding: 8px !important;
+    --name-width: 45% !important;
+    
+    /* Modern color scheme */
+    --background-color: rgba(35, 35, 35, 0.95) !important;
+    --text-color: #ffffff !important;
+    --title-background-color: #1a1a1a !important;
+    --title-text-color: #ffffff !important;
+    --widget-color: #3d3d3d !important;
+    --hover-color: #4f4f4f !important;
+    --focus-color: #45a9f9 !important;
+    --number-color: #45a9f9 !important;
+    --string-color: #a2db3c !important;
+    --border-radius: 8px !important;
+
+    /* Modern shadow */
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2) !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    pointer-events: auto !important;
+    z-index: 1000 !important;
 }
 
 .lil-gui .title {
@@ -63,28 +78,88 @@ canvas {
 
 /* General button styling within lil-gui */
 .lil-gui button {
-    background-color: #3b82f6 !important; /* Tailwind blue-500 */
-    color: white !important;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 10px !important;
-    text-align: center;
-    transition: background-color 0.2s;
-    width: 100%; /* Make buttons fill width */
-    margin-top: 5px !important;
-    cursor: pointer;
+    background: var(--focus-color) !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    transition: all 0.15s ease !important;
+    text-transform: uppercase !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px !important;
 }
 
 .lil-gui button:hover {
-    background-color: #2563eb !important; /* Tailwind blue-600 */
+    background: #2d8ac7 !important;
+    transform: translateY(-1px) !important;
 }
 
- /* Style specifically for export buttons */
+/* Style the folders */
+.lil-gui .folder > .title {
+    background: var(--title-background-color) !important;
+    padding: 12px var(--padding) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+}
+
+/* Style the controllers */
+.lil-gui .controller {
+    border-radius: 6px !important;
+    margin: 4px 0 !important;
+    padding: 4px !important;
+    transition: background-color 0.15s ease !important;
+    pointer-events: auto !important;
+}
+
+.lil-gui .controller:hover {
+    background-color: var(--hover-color) !important;
+}
+
+/* Style the number inputs */
+.lil-gui input[type="number"] {
+    background: var(--widget-color) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+}
+
+/* Style the color pickers */
+.lil-gui .color {
+    border-radius: 4px !important;
+    overflow: hidden !important;
+}
+
+/* Add smooth transitions */
+.lil-gui * {
+    transition: background-color 0.15s ease, border-color 0.15s ease !important;
+}
+
+/* Export button special styling */
 .lil-gui .export-button button {
-     background-color: #10b981 !important; /* Tailwind Emerald-500 */
-     margin-top: 8px !important; /* Add some space above export buttons */
+    background: linear-gradient(45deg, #45a9f9, #2d8ac7) !important;
+    box-shadow: 0 2px 8px rgba(69, 169, 249, 0.2) !important;
 }
 
- .lil-gui .export-button button:hover {
-     background-color: #059669 !important; /* Tailwind Emerald-600 */
+.lil-gui .export-button button:hover {
+    background: linear-gradient(45deg, #2d8ac7, #1d5a84) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Ensure folders remain interactive */
+.lil-gui .folder {
+    pointer-events: auto !important;
+}
+
+/* Style the play/pause button */
+.play-pause-button {
+    font-family: system-ui, -apple-system, sans-serif !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+}
+
+.play-pause-button:hover {
+    transform: scale(1.05) !important;
+    background: var(--focus-color) !important;
+}
+
+/* Ensure the button container takes full width */
+.lil-gui .controller.function .widget {
+    width: 100% !important;
 }

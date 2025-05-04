@@ -44,7 +44,9 @@ const params = {
     togglePlayPause: function() {
         this.isPlaying = !this.isPlaying;
         updatePlayPauseButton();
-    }
+    },
+    directionX: 0.0, // Range from -1 to 1
+    directionY: 0.0, // Range from -1 to 1
 };
 
 // --- Simulation Presets ---
@@ -60,7 +62,9 @@ const presets = {
             color1: '#1a3b80',
             color2: '#e6cc33',
             color3: '#1a1a1a'
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Coral Growth': { 
         feed: 0.0545, 
@@ -73,7 +77,9 @@ const presets = {
             color1: '#ff6b6b',
             color2: '#48dbfb',
             color3: '#341f97'
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Worms': { 
         feed: 0.026, 
@@ -86,7 +92,9 @@ const presets = {
             color1: '#8B4513', // Saddle brown
             color2: '#D2691E', // Chocolate
             color3: '#3D1F00'  // Dark brown
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Waves': { 
         feed: 0.017,    // Updated from 0.014
@@ -99,7 +107,9 @@ const presets = {
             color1: '#0984e3', // Ocean blue
             color2: '#00cec9', // Teal
             color3: '#2d3436'  // Dark slate
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Solitons': { 
         feed: 0.025, 
@@ -112,7 +122,9 @@ const presets = {
             color1: '#e056fd',
             color2: '#f9ca24',
             color3: '#2c2c54'
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Chaos': { 
         feed: 0.039,    // Same as provided
@@ -125,7 +137,9 @@ const presets = {
             color1: '#39FF14', // Neon green
             color2: '#B026FF', // Neon purple
             color3: '#0D0D0D'  // Very dark gray/black for contrast
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     },
     'Zebra': { 
         feed: 0.029, 
@@ -138,7 +152,9 @@ const presets = {
             color1: '#2d3436', // Dark gray (inverted from white)
             color2: '#ffffff', // White (inverted from dark gray)
             color3: '#636e72'  // Medium gray stays as transition color
-        }
+        },
+        directionX: 0,
+        directionY: 0,
     }
 };
 
@@ -157,66 +173,63 @@ const rdVertexShader = `
 
 // Fragment shader for the Reaction-Diffusion step (Gray-Scott model)
 const rdFragmentShader = `
-    varying vec2 vUv; // Received UV coordinates
-    uniform sampler2D tPrev; // Texture holding the previous state (A in .r, B in .g)
-    uniform vec2 pixelSize; // Size of one pixel: (1/width, 1/height)
-
-    // Simulation parameters passed from JavaScript
+    varying vec2 vUv;
+    uniform sampler2D tPrev;
+    uniform vec2 pixelSize;
     uniform float feed;
     uniform float kill;
-    uniform float diffA; // Diffusion rate for A
-    uniform float diffB; // Diffusion rate for B
-    uniform float timeStep; // Simulation time step (dt)
+    uniform float diffA;
+    uniform float diffB;
+    uniform float timeStep;
+    uniform vec2 evolutionDirection;
 
-    // Calculate Laplacian using 9-point stencil (center, adjacent, diagonal)
-    // Provides better stability/isotropy than 5-point
     vec2 laplacian(vec2 uv) {
         vec2 L = vec2(0.0);
-        float wCenter = -1.0;   // Weight for the center pixel
-        float wAdjacent = 0.2;  // Weight for N, S, E, W neighbors
-        float wDiagonal = 0.05; // Weight for NE, NW, SE, SW neighbors
+        float wCenter = -1.0;
+        float wAdjacent = 0.2;
+        float wDiagonal = 0.05;
 
-        // Sample adjacent neighbors (with texture wrapping using mod)
-        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x, 0.0), 1.0)).rg; // Left
-        L += texture2D(tPrev, mod(uv + vec2( pixelSize.x, 0.0), 1.0)).rg; // Right
-        L += texture2D(tPrev, mod(uv + vec2(0.0, -pixelSize.y), 1.0)).rg; // Bottom
-        L += texture2D(tPrev, mod(uv + vec2(0.0,  pixelSize.y), 1.0)).rg; // Top
-        L *= wAdjacent; // Apply adjacent weight
+        // Add directional bias to the sampling
+        vec2 offset = evolutionDirection * pixelSize * 2.0;
 
-        // Sample diagonal neighbors
-        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x, -pixelSize.y), 1.0)).rg * wDiagonal;
-        L += texture2D(tPrev, mod(uv + vec2( pixelSize.x, -pixelSize.y), 1.0)).rg * wDiagonal;
-        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x,  pixelSize.y), 1.0)).rg * wDiagonal;
-        L += texture2D(tPrev, mod(uv + vec2( pixelSize.x,  pixelSize.y), 1.0)).rg * wDiagonal;
+        // Sample with directional offset
+        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x, 0.0) + offset, 1.0)).rg;
+        L += texture2D(tPrev, mod(uv + vec2(pixelSize.x, 0.0) + offset, 1.0)).rg;
+        L += texture2D(tPrev, mod(uv + vec2(0.0, -pixelSize.y) + offset, 1.0)).rg;
+        L += texture2D(tPrev, mod(uv + vec2(0.0, pixelSize.y) + offset, 1.0)).rg;
+        L *= wAdjacent;
 
-        // Add weighted center pixel value
+        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x, -pixelSize.y) + offset, 1.0)).rg * wDiagonal;
+        L += texture2D(tPrev, mod(uv + vec2(pixelSize.x, -pixelSize.y) + offset, 1.0)).rg * wDiagonal;
+        L += texture2D(tPrev, mod(uv + vec2(-pixelSize.x, pixelSize.y) + offset, 1.0)).rg * wDiagonal;
+        L += texture2D(tPrev, mod(uv + vec2(pixelSize.x, pixelSize.y) + offset, 1.0)).rg * wDiagonal;
+
         L += texture2D(tPrev, uv).rg * wCenter;
-        return L; // Return the calculated Laplacian (change in A and B due to diffusion)
+        
+        return L;
     }
 
     void main() {
-        // Get current chemical concentrations (A, B) at this pixel
-        vec2 current = texture2D(tPrev, vUv).rg; // A = current.r, B = current.g
-
-        // Calculate the diffusion term (Laplacian)
+        vec2 current = texture2D(tPrev, vUv).rg;
+        
+        // Calculate the diffusion term with directional influence
         vec2 L = laplacian(vUv);
 
-        // Calculate the reaction term (A * B^2)
+        // Calculate the reaction term
         float reaction = current.r * current.g * current.g;
 
-        // Gray-Scott equations: dA/dt = D_a * laplacian(A) - A*B^2 + feed*(1-A)
-        float deltaA = (diffA * L.r) - reaction + (feed * (1.0 - current.r));
-        // dB/dt = D_b * laplacian(B) + A*B^2 - (kill+feed)*B
-        float deltaB = (diffB * L.g) + reaction - ((kill + feed) * current.g);
+        // Add directional bias to the reaction-diffusion
+        float dirStrength = length(evolutionDirection) * 0.5;
+        float feedMod = feed * (1.0 + dirStrength);
+        float killMod = kill * (1.0 - dirStrength);
 
-        // Update A and B using simple Euler integration: next = current + delta * dt
+        // Modified Gray-Scott equations
+        float deltaA = (diffA * L.r) - reaction + (feedMod * (1.0 - current.r));
+        float deltaB = (diffB * L.g) + reaction - ((killMod + feedMod) * current.g);
+
         vec2 next = current + vec2(deltaA, deltaB) * timeStep;
-
-        // Clamp values between 0 and 1 to prevent instability
         next = clamp(next, 0.0, 1.0);
 
-        // Output the new state (A in red channel, B in green channel)
-        // Blue and Alpha channels are not used by the simulation itself
         gl_FragColor = vec4(next.r, next.g, 0.0, 1.0);
     }
 `;
@@ -362,7 +375,8 @@ function init() {
             kill: { value: params.kill },
             diffA: { value: params.diffA },
             diffB: { value: params.diffB },
-            timeStep: { value: params.timeStep }
+            timeStep: { value: params.timeStep },
+            evolutionDirection: { value: new THREE.Vector2(params.directionX, params.directionY) }
         },
         vertexShader: rdVertexShader,
         fragmentShader: rdFragmentShader
@@ -412,6 +426,8 @@ function init() {
 
     // --- Event Listeners ---
     window.addEventListener('resize', onWindowResize); // Handle window resizing
+
+    createDirectionControl();
 }
 
 // --- Initialize/Reset Simulation Texture ---
@@ -789,4 +805,214 @@ function updatePlayPauseButton() {
         playPauseButton.innerHTML = icon;
         playPauseButton.title = params.isPlaying ? 'Pause' : 'Play';
     }
+}
+
+function createDirectionControl() {
+    // Create main container
+    const container = document.createElement('div');
+    container.style.cssText = `
+        position: absolute;
+        left: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 200px;
+        background: rgba(35, 35, 35, 0.95);
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        padding: 15px;
+        touch-action: none;
+        user-select: none;
+    `;
+
+    // Create title
+    const title = document.createElement('div');
+    title.textContent = 'Evolution Direction';
+    title.style.cssText = `
+        width: 100%;
+        text-align: center;
+        color: white;
+        font-family: sans-serif;
+        font-size: 14px;
+        margin-bottom: 15px;
+        font-weight: bold;
+    `;
+
+    // Create direction pad container
+    const padContainer = document.createElement('div');
+    padContainer.style.cssText = `
+        width: 100px;
+        height: 100px;
+        margin: 0 auto;
+        position: relative;
+        background: #2d2d2d;
+        border-radius: 50%;
+        border: 2px solid #3d3d3d;
+    `;
+
+    // Indicator dot
+    const indicator = document.createElement('div');
+    indicator.style.cssText = `
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #45a9f9;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        left: 50%;
+        top: 50%;
+        cursor: grab;
+        box-shadow: 0 0 10px rgba(69, 169, 249, 0.5);
+    `;
+
+    // Create coordinates container
+    const coordsContainer = document.createElement('div');
+    coordsContainer.style.cssText = `
+        margin-top: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 10px;
+    `;
+
+    // Create coordinate inputs
+    function createCoordInput(label) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        `;
+
+        const labelEl = document.createElement('label');
+        labelEl.textContent = label;
+        labelEl.style.cssText = `
+            color: white;
+            font-size: 12px;
+            margin-bottom: 5px;
+            font-family: sans-serif;
+        `;
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.style.cssText = `
+            width: 70px;
+            background: #2d2d2d;
+            border: 1px solid #3d3d3d;
+            color: #fff;
+            padding: 4px;
+            border-radius: 4px;
+            text-align: center;
+            font-family: monospace;
+        `;
+
+        container.appendChild(labelEl);
+        container.appendChild(input);
+        return { container, input };
+    }
+
+    const xCoord = createCoordInput('X');
+    const yCoord = createCoordInput('Y');
+
+    // Create recenter button
+    const recenterBtn = document.createElement('button');
+    recenterBtn.textContent = '⌖ Recenter';
+    recenterBtn.style.cssText = `
+        margin-top: 15px;
+        width: 100%;
+        padding: 8px;
+        background: #45a9f9;
+        border: none;
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+        font-family: sans-serif;
+        font-size: 14px;
+        transition: background 0.2s;
+    `;
+    recenterBtn.onmouseover = () => recenterBtn.style.background = '#2d8ac7';
+    recenterBtn.onmouseout = () => recenterBtn.style.background = '#45a9f9';
+
+    // Update function
+    function updateDirection(x, y, updateInputs = true) {
+        // Normalize and scale values
+        x = Math.max(Math.min(x, 1), -1) * 0.3;
+        y = Math.max(Math.min(y, 1), -1) * 0.3;
+        
+        // Calculate position relative to center
+        const centerX = 50; // Center of 100px container
+        const centerY = 50;
+        const offsetX = (x/0.3) * 45; // 45px max movement radius
+        const offsetY = (y/0.3) * 45;
+        
+        // Update indicator position
+        indicator.style.left = `${centerX + offsetX}px`;
+        indicator.style.top = `${centerY + offsetY}px`;
+        
+        // Update params and shader
+        params.directionX = x;
+        params.directionY = -y;
+        rdMaterial.uniforms.evolutionDirection.value.set(x, -y);
+
+        if (updateInputs) {
+            xCoord.input.value = x.toFixed(3);
+            yCoord.input.value = (-y).toFixed(3);
+        }
+    }
+
+    // Event handlers
+    let isDragging = false;
+
+    padContainer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        const rect = padContainer.getBoundingClientRect();
+        const x = ((e.clientX - rect.left - 50) / 45); // Normalize to container center
+        const y = ((e.clientY - rect.top - 50) / 45);
+        updateDirection(x, y);
+        e.preventDefault(); // Prevent text selection
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const rect = padContainer.getBoundingClientRect();
+        const x = ((e.clientX - rect.left - 50) / 45);
+        const y = ((e.clientY - rect.top - 50) / 45);
+        updateDirection(x, y);
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    // Input field handlers
+    xCoord.input.addEventListener('change', () => {
+        const x = parseFloat(xCoord.input.value);
+        const y = -parseFloat(yCoord.input.value);
+        updateDirection(x/0.3, y/0.3, false);
+    });
+
+    yCoord.input.addEventListener('change', () => {
+        const x = parseFloat(xCoord.input.value);
+        const y = -parseFloat(yCoord.input.value);
+        updateDirection(x/0.3, y/0.3, false);
+    });
+
+    // Recenter button handler
+    recenterBtn.addEventListener('click', () => {
+        updateDirection(0, 0);
+    });
+
+    // Assembly
+    padContainer.appendChild(indicator);
+    coordsContainer.appendChild(xCoord.container);
+    coordsContainer.appendChild(yCoord.container);
+
+    container.appendChild(title);
+    container.appendChild(padContainer);
+    container.appendChild(coordsContainer);
+    container.appendChild(recenterBtn);
+    document.body.appendChild(container);
+
+    // Initialize with centered position (should now be actually centered)
+    updateDirection(0, 0);
 }

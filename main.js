@@ -11,6 +11,8 @@ let controls;
 let rdMaterial, displayMaterial;
 let rt1, rt2; // Render targets for ping-ponging simulation
 let quadScene, quadCamera; // Helper scene for rendering simulation steps
+let isSimulating = true; // Add this line: controls simulation state
+
 
 // --- Constants ---
 const TEXTURE_WIDTH = 1024; // Width of the simulation texture
@@ -37,6 +39,17 @@ const params = {
 
     // Actions (linked to functions)
     reset: resetSimulation,
+    function playSimulation() {
+    isSimulating = true;
+    console.log("Simulation Playing");
+    // Optionally, update button appearance here if needed
+}
+
+function pauseSimulation() {
+    isSimulating = false;
+    console.log("Simulation Paused");
+    // Optionally, update button appearance here if needed
+}
     savePNG: savePNG,
     saveGLTF: saveGLTF
 };
@@ -202,8 +215,8 @@ const displayFragmentShader = `
 
 // --- Initialization Function ---
 function init() {
-    // --- Scene ---
-    scene = new THREE.Scene();
+    // ---  ---
+     = new THREE.();
 
     // --- Camera ---
     camera = new THREE.PerspectiveCamera(
@@ -294,6 +307,7 @@ function init() {
     const planetGeometry = new THREE.SphereGeometry(1, SPHERE_SEGMENTS_W, SPHERE_SEGMENTS_H);
     planetMesh = new THREE.Mesh(planetGeometry, displayMaterial); // Combine geometry and material
     scene.add(planetMesh); // Add the planet to the main scene
+    planetMesh.rotation.y = Math.PI; // Rotate 180 degrees (PI radians) around Y
 
     // --- Initialize Simulation Texture ---
     resetSimulation(); // Set the initial state of the RD texture
@@ -402,6 +416,14 @@ function setupGUI() {
     simFolder.add(params, 'diffB', 0.1, 1.0, 0.01).name('Diffusion B (Db)').onChange(v => rdMaterial.uniforms.diffB.value = v);
     simFolder.add(params, 'timeStep', 0.5, 1.5, 0.01).name('Time Step (dt)').onChange(v => rdMaterial.uniforms.timeStep.value = v);
     simFolder.add(params, 'reset').name('Reset Simulation'); // Button to call resetSimulation
+   
+    // Add Play/Pause to params object first
+params.play = playSimulation;
+params.pause = pauseSimulation;
+
+// Then add buttons to GUI
+simFolder.add(params, 'play').name('Play ▶');
+simFolder.add(params, 'pause').name('Pause ⏸');
     // simFolder.close(); // Optional: Start folder closed
 
     // --- Display Folder ---
@@ -576,25 +598,25 @@ function animate(time) {
     // Convert time to seconds (or use for other effects)
     const dt = time * 0.0001;
 
-    // --- Run Simulation Steps ---
-    renderer.autoClear = false; // Disable automatic clearing for ping-pong rendering
-    // Perform multiple simulation steps per display frame for faster evolution
+   // --- Run Simulation Steps (if simulating) ---
+if (isSimulating) { // <-- Add this check
+    renderer.autoClear = false;
     for (let i = 0; i < SIMULATION_STEPS_PER_FRAME; i++) {
         // Set the input texture for the simulation shader (current state is in rt1)
         rdMaterial.uniforms.tPrev.value = rt1.texture;
 
         // Render the simulation step to the *other* render target (rt2)
         renderer.setRenderTarget(rt2);
-        renderer.clear(); // Clear the target before rendering
-        renderer.render(quadScene, quadCamera); // Render the quad using the RD material
+        renderer.clear();
+        renderer.render(quadScene, quadCamera);
 
-        // Swap render targets: rt2 now holds the new state, rt1 holds the previous
+        // Swap render targets
         const temp = rt1;
         rt1 = rt2;
         rt2 = temp;
-        // After the swap, rt1 holds the latest state, ready for display or the next step
     }
-     renderer.autoClear = true; // Re-enable automatic clearing for the main render pass
+    renderer.autoClear = true;
+} // <-- Add closing brace for the check
 
 
     // --- Render Main Scene ---

@@ -1,86 +1,158 @@
-body {
-    margin: 0;
-    overflow: hidden;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: #050505;
-    color: #eee;
+/* Planet Maker — the unapaulogetic system.
+
+   Tokens lifted from dist/brand-tokens.css on the main site so the tool looks
+   like it belongs to the same practice. Two rules from that system decide most
+   of what follows: nothing is rounded, and the signal green is spent on one
+   thing at a time. */
+:root{
+  --room:#090909; --wall:#111111; --edge:#333333; --control-edge:#777771;
+  --dust:#aaa9a4; --paint:#e8e8e2; --beam:#f7f7ef; --signal:#c9ff36; --pulse:#fbea4b;
+  --font-display:Handjet, monospace;
+  --font-mono:"IBM Plex Mono", ui-monospace, monospace;
+  --font-body:Rubik, system-ui, sans-serif;
+  --panel-w:272px;
+  color-scheme:dark;
 }
 
-canvas {
-    display: block;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; overflow:hidden; background:var(--room); color:var(--paint);
+  font-family:var(--font-body); font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+canvas{display:block}
+#container{position:fixed; inset:0}
+
+:focus-visible{outline:2px solid var(--signal); outline-offset:2px}
+
+/* ---- the panel -------------------------------------------------------- */
+.panel{
+  position:fixed; top:0; right:0; z-index:10;
+  width:var(--panel-w); max-height:100%;
+  display:flex; flex-direction:column;
+  background:var(--room); border-left:1px solid var(--edge);
+  padding-top:env(safe-area-inset-top, 0px);
+  overflow-y:auto; overscroll-behavior:contain;
+}
+.panel-head{
+  display:flex; align-items:baseline; gap:8px;
+  padding:16px 16px 12px; border-bottom:1px solid var(--edge);
+  position:sticky; top:0; background:var(--room); z-index:2;
+}
+.panel-head h1{
+  margin:0; font-family:var(--font-display); font-weight:700;
+  font-size:22px; letter-spacing:.02em; color:var(--beam); line-height:1;
+}
+.panel-head .by{font-family:var(--font-mono); font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--dust); margin-left:auto}
+
+.group{border-bottom:1px solid var(--edge); padding:14px 16px 16px}
+.group > h2{
+  margin:0 0 12px; font-family:var(--font-mono); font-size:9.5px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--dust); font-weight:400;
 }
 
-/* Glassmorphism GUI styling */
-.lil-gui {
-    --widget-height: 28px !important;
-    --spacing: 8px !important;
-    --font-size: 13px !important;
-    --input-font-size: 13px !important;
-    --padding: 10px !important;
-    --widget-padding: 6px !important;
-    --name-width: 45% !important;
-    
-    background: rgba(15, 15, 15, 0.6) !important;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    
-    --text-color: #ffffff !important;
-    --title-background-color: transparent !important;
-    --title-text-color: #ffffff !important;
-    --widget-color: rgba(255, 255, 255, 0.1) !important;
-    --hover-color: rgba(255, 255, 255, 0.2) !important;
-    --focus-color: #4facfe !important;
-    --number-color: #4facfe !important;
-    --string-color: #a2db3c !important;
-    
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4) !important;
-    border-radius: 16px !important;
-    overflow: hidden !important;
-    max-height: 95vh !important;
-    z-index: 1000 !important;
+/* ---- rows ------------------------------------------------------------- */
+.row{display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center; margin-bottom:11px}
+.row:last-child{margin-bottom:0}
+.row > label{font-family:var(--font-mono); font-size:11px; color:var(--dust); letter-spacing:.02em}
+.row .val{font-family:var(--font-mono); font-size:11px; color:var(--signal); font-variant-numeric:tabular-nums}
+.row input[type="range"]{grid-column:1/-1; width:100%; margin:0; accent-color:var(--signal); height:20px}
+
+/* Square, because the system has no rounded controls. */
+.btn{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.07em; text-transform:uppercase;
+  background:transparent; color:var(--paint); border:1px solid var(--control-edge);
+  padding:9px 10px; min-height:38px; cursor:pointer; text-align:center;
+  transition:background 140ms, color 140ms, border-color 140ms;
+}
+.btn:hover{border-color:var(--signal); color:var(--signal)}
+.btn.is-primary{background:var(--signal); color:var(--room); border-color:var(--signal)}
+.btn.is-primary:hover{background:var(--pulse); border-color:var(--pulse); color:var(--room)}
+.btn[aria-pressed="true"]{border-color:var(--signal); color:var(--signal)}
+.btn-row{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+.btn-row.one{grid-template-columns:1fr}
+
+.presets{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+
+/* ---- colours ---------------------------------------------------------- */
+.swatches{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+.sw{display:flex; flex-direction:column; gap:5px}
+.sw span{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--dust); text-align:center}
+.sw input[type="color"]{
+  width:100%; height:30px; padding:0; border:1px solid var(--edge);
+  background:transparent; cursor:pointer;
+}
+.sw input[type="color"]::-webkit-color-swatch-wrapper{padding:2px}
+.sw input[type="color"]::-webkit-color-swatch{border:0}
+
+/* ---- the map ----------------------------------------------------------
+   Feed and kill are not independent: the region where a pattern survives is a
+   narrow diagonal band, measured by sweeping the simulation. Two blind sliders
+   put you in dead space most of the time, so the band is drawn and you drag a
+   point across it. */
+.map-wrap{position:relative; margin-bottom:10px}
+#map{display:block; width:100%; height:auto; border:1px solid var(--edge); cursor:crosshair; touch-action:none}
+.map-axis{display:flex; justify-content:space-between; font-family:var(--font-mono);
+  font-size:8.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dust); margin-top:5px}
+.map-read{font-family:var(--font-mono); font-size:10.5px; color:var(--dust);
+  margin-top:7px; font-variant-numeric:tabular-nums; display:flex; justify-content:space-between; gap:8px}
+.map-read b{color:var(--signal); font-weight:400}
+.map-read .life[data-state="dead"]{color:var(--pulse)}
+
+/* ---- wind pad --------------------------------------------------------- */
+.pad-wrap{display:flex; flex-direction:column; align-items:center; gap:8px}
+#pad{
+  width:110px; height:110px; border:1px solid var(--edge); background:var(--wall);
+  position:relative; cursor:grab; touch-action:none; flex:none;
+}
+#pad:active{cursor:grabbing}
+#pad::before,#pad::after{content:""; position:absolute; background:var(--edge)}
+#pad::before{left:50%; top:0; bottom:0; width:1px}
+#pad::after{top:50%; left:0; right:0; height:1px}
+#pad-dot{
+  position:absolute; width:9px; height:9px; background:var(--signal);
+  left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none;
 }
 
-.lil-gui .title {
-     font-weight: 600;
-     letter-spacing: 0.5px;
-     border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+/* ---- the toggle to hide it all --------------------------------------- */
+#toggle{
+  position:fixed; z-index:11; top:0; right:var(--panel-w);
+  margin-top:env(safe-area-inset-top, 0px);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+  background:var(--room); color:var(--dust); border:1px solid var(--edge); border-right:0;
+  padding:10px 11px; min-height:38px; cursor:pointer;
+}
+#toggle:hover{color:var(--signal); border-color:var(--signal)}
+body.hidden-ui .panel{transform:translateX(100%)}
+body.hidden-ui #toggle{right:0; border-right:1px solid var(--edge)}
+.panel{transition:transform 220ms cubic-bezier(.2,.7,.3,1)}
+#toggle{transition:right 220ms cubic-bezier(.2,.7,.3,1)}
+
+/* ---- a readout, bottom left ------------------------------------------ */
+#hud{
+  position:fixed; left:0; bottom:0; z-index:9;
+  padding:10px 14px; padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px));
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.06em;
+  color:var(--dust); text-transform:uppercase; pointer-events:none;
+  display:flex; gap:14px; flex-wrap:wrap;
+}
+#hud b{color:var(--paint); font-weight:400; font-variant-numeric:tabular-nums}
+
+/* ---- phone ------------------------------------------------------------ */
+@media (max-width:720px){
+  :root{--panel-w:100%}
+  .panel{max-height:58%; top:auto; bottom:0; border-left:0; border-top:1px solid var(--edge);
+         padding-top:0; padding-bottom:env(safe-area-inset-bottom, 0px)}
+  #toggle{top:auto; bottom:58%; right:0; margin:0 0 1px 0; border-right:1px solid var(--edge)}
+  body.hidden-ui .panel{transform:translateY(100%)}
+  body.hidden-ui #toggle{bottom:0}
+  #hud{display:none}
+  .presets{grid-template-columns:repeat(3,1fr)}
 }
 
-.lil-gui input[type="text"], .lil-gui input[type="number"] {
-    background-color: rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 6px;
-}
-
-.lil-gui button {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-radius: 8px !important;
-    padding: 8px !important;
-    transition: all 0.2s ease !important;
-    font-weight: 500 !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-}
-
-.lil-gui button:hover {
-    background: var(--focus-color) !important;
-    color: #fff !important;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
-}
-
-.lil-gui .export-button button {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
-    color: #000 !important;
-    font-weight: 700 !important;
-    border: none !important;
-}
-
-/* Direction Pad */
-#direction-pad-container {
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    background: rgba(15, 15, 15, 0.6) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 16px !important;
+@media (prefers-reduced-motion:reduce){
+  .panel,#toggle{transition:none}
 }

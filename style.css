@@ -57,7 +57,7 @@ canvas{display:block}
 .row{display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center; margin-bottom:11px}
 .row:last-child{margin-bottom:0}
 .row > label{font-family:var(--font-mono); font-size:11px; color:var(--dust); letter-spacing:.02em}
-.row .val{font-family:var(--font-mono); font-size:11px; color:var(--signal); font-variant-numeric:tabular-nums}
+.row .val{font-family:var(--font-mono); font-size:11px; color:var(--paint); font-variant-numeric:tabular-nums}
 .row input[type="range"]{grid-column:1/-1; width:100%; margin:0; accent-color:var(--signal); height:20px}
 
 /* Square, because the system has no rounded controls. */
@@ -67,7 +67,7 @@ canvas{display:block}
   padding:9px 10px; min-height:38px; cursor:pointer; text-align:center;
   transition:background 140ms, color 140ms, border-color 140ms;
 }
-.btn:hover{border-color:var(--signal); color:var(--signal)}
+.btn:hover{border-color:var(--paint); color:var(--beam)}
 .btn.is-primary{background:var(--signal); color:var(--room); border-color:var(--signal)}
 .btn.is-primary:hover{background:var(--pulse); border-color:var(--pulse); color:var(--room)}
 .btn[aria-pressed="true"]{border-color:var(--signal); color:var(--signal)}
@@ -99,8 +99,18 @@ canvas{display:block}
   font-size:8.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dust); margin-top:5px}
 .map-read{font-family:var(--font-mono); font-size:10.5px; color:var(--dust);
   margin-top:7px; font-variant-numeric:tabular-nums; display:flex; justify-content:space-between; gap:8px}
-.map-read b{color:var(--signal); font-weight:400}
+.map-read b{color:var(--paint); font-weight:400}
 .map-read .life[data-state="dead"]{color:var(--pulse)}
+
+/* ---- sound -------------------------------------------------------------
+   The meter is the only moving thing in the panel, and it exists so that
+   "it isn't reacting" can be told apart from "it isn't hearing anything". */
+.meter{height:3px; background:var(--wall); border:1px solid var(--edge); margin-bottom:10px; overflow:hidden}
+.meter i{display:block; height:100%; background:var(--signal); transform:scaleX(0);
+  transform-origin:left center; transition:transform 90ms linear}
+.hint{margin:9px 0 0; font-size:10px; line-height:1.5; letter-spacing:.02em; color:var(--dust)}
+.hint[data-state="bad"]{color:var(--pulse)}
+#g-sound.is-live > h2{color:var(--signal)}
 
 /* ---- wind pad --------------------------------------------------------- */
 .pad-wrap{display:flex; flex-direction:column; align-items:center; gap:8px}
@@ -125,7 +135,7 @@ canvas{display:block}
   background:var(--room); color:var(--dust); border:1px solid var(--edge); border-right:0;
   padding:10px 11px; min-height:38px; cursor:pointer;
 }
-#toggle:hover{color:var(--signal); border-color:var(--signal)}
+#toggle:hover{color:var(--beam); border-color:var(--control-edge)}
 body.hidden-ui .panel{transform:translateX(100%)}
 body.hidden-ui #toggle{right:0; border-right:1px solid var(--edge)}
 .panel{transition:transform 220ms cubic-bezier(.2,.7,.3,1)}
@@ -151,6 +161,24 @@ body.hidden-ui #toggle{right:0; border-right:1px solid var(--edge)}
   body.hidden-ui #toggle{bottom:0}
   #hud{display:none}
   .presets{grid-template-columns:repeat(3,1fr)}
+  /* Thumbs, not cursors: every control clears the 44px target, and the
+     sliders get a taller hit area than their 3px track suggests. */
+  .btn{min-height:44px; font-size:11.5px}
+  #toggle{min-height:44px; padding:12px 14px}
+  .row input[type="range"]{height:34px}
+  .sw input[type="color"]{height:44px}
+  #pad{width:124px; height:124px}
+  .group{padding:16px 16px 18px}
+  .map-read{font-size:11px}
+}
+
+/* A phone in landscape has almost no height to give a bottom sheet. */
+@media (max-width:900px) and (max-height:480px){
+  .panel{max-height:100%; top:0; bottom:auto; width:290px; right:0; left:auto;
+         border-top:0; border-left:1px solid var(--edge)}
+  #toggle{top:0; bottom:auto; right:290px; border-right:0}
+  body.hidden-ui .panel{transform:translateX(100%)}
+  body.hidden-ui #toggle{right:0}
 }
 
 @media (prefers-reduced-motion:reduce){

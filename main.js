@@ -73,29 +73,34 @@ const VIABILITY = {
    the band, which is why it is a separate control rather than part of a
    preset. */
 const PRESETS = {
-  Mitosis: { feed: 0.034, kill: 0.062, diffA: 1.00, diffB: 0.50,
-             c1: '#0d1f0a', c2: '#c9ff36', c3: '#090909', atm: '#c9ff36' },
+  Bone:    { feed: 0.066, kill: 0.062, diffA: 1.00, diffB: 0.50,
+             c1: '#14161a', c2: '#f0efe6', c3: '#06070a', atm: '#9aa3ad' },
   Coral:   { feed: 0.058, kill: 0.062, diffA: 1.00, diffB: 0.50,
-             c1: '#7a1f3d', c2: '#ffb38a', c3: '#2b0d1a', atm: '#ff7a59' },
-  Waves:   { feed: 0.018, kill: 0.046, diffA: 1.00, diffB: 0.50,
-             c1: '#06304a', c2: '#63e3d4', c3: '#04141f', atm: '#63e3d4' },
-  Chaos:   { feed: 0.042, kill: 0.064, diffA: 1.00, diffB: 0.50,
-             c1: '#2b0b4a', c2: '#fbea4b', c3: '#0d0416', atm: '#b026ff' },
-  Lace:    { feed: 0.066, kill: 0.062, diffA: 1.00, diffB: 0.50,
-             c1: '#1a1a1a', c2: '#f7f7ef', c3: '#050505', atm: '#aaa9a4' },
+             c1: '#5e1730', c2: '#ffb38a', c3: '#220a14', atm: '#ff7a59' },
+  Tide:    { feed: 0.018, kill: 0.046, diffA: 1.00, diffB: 0.50,
+             c1: '#06304a', c2: '#63e3d4', c3: '#04141f', atm: '#4fb8cc' },
+  Ash:     { feed: 0.042, kill: 0.064, diffA: 1.00, diffB: 0.50,
+             c1: '#241f2b', c2: '#cfc4d6', c3: '#0c0810', atm: '#8b7fa0' },
   Fissure: { feed: 0.090, kill: 0.057, diffA: 1.00, diffB: 0.50,
              c1: '#3d1a06', c2: '#ff8c1a', c3: '#140702', atm: '#ff5a1a' },
+  /* The house colour, kept as one planet among six rather than the first
+     thing anyone sees. */
+  Signal:  { feed: 0.034, kill: 0.062, diffA: 1.00, diffB: 0.50,
+             c1: '#0d1f0a', c2: '#c9ff36', c3: '#090909', atm: '#9ac42b' },
 };
 
+/** Opens on bone rather than acid green: the accent is for one thing at a time. */
+const DEFAULT_PRESET = 'Bone';
+
+const D = PRESETS[DEFAULT_PRESET];
 const params = {
-  feed: PRESETS.Mitosis.feed, kill: PRESETS.Mitosis.kill,
-  diffA: PRESETS.Mitosis.diffA, diffB: PRESETS.Mitosis.diffB,
-  preset: 'Mitosis',
+  feed: D.feed, kill: D.kill, diffA: D.diffA, diffB: D.diffB,
+  preset: DEFAULT_PRESET,
   smoothness: 0.5, displacementScale: 0.12,
-  color1: PRESETS.Mitosis.c1, color2: PRESETS.Mitosis.c2,
-  color3: PRESETS.Mitosis.c3, atmosphereColor: PRESETS.Mitosis.atm,
+  color1: D.c1, color2: D.c2, color3: D.c3, atmosphereColor: D.atm,
   bloomStrength: 0.45, bloomRadius: 0.55, bloomThreshold: 0.35,
   isPlaying: true, drift: true, rotationSpeed: 0.0012, wireframe: false,
+  reactivity: 0.7,
 };
 
 let scene, camera, renderer, composer, controls, bloomPass;
@@ -298,6 +303,7 @@ function init(){
 
   seed();
   buildUI();
+  frameCamera();
   window.addEventListener('resize', onResize);
 }
 
@@ -306,6 +312,24 @@ function onResize(){
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  frameCamera();
+}
+
+/**
+ * Pull the camera back far enough that the planet fits.
+ *
+ * The field of view is vertical, so on a portrait phone the horizontal one is
+ * much narrower — at 375 by 812 it spans about 1.6 world units against a
+ * planet two units across, and the thing is cropped on both sides. Fitting
+ * against whichever field is smaller is what makes it whole on a phone.
+ */
+function frameCamera(){
+  const vFov = camera.fov * Math.PI / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+  /* A margin over the unit sphere for the relief and the atmosphere. */
+  const distance = 1.32 / Math.sin(Math.min(vFov, hFov) / 2);
+  camera.position.setLength(clamp(distance, controls.minDistance, controls.maxDistance));
+  controls.update();
 }
 
 /**
@@ -395,6 +419,136 @@ function applyPreset(name){
   syncUI();
 }
 
+/* ---- listening ---------------------------------------------------------
+ *
+ * A browser cannot simply tap what the device is playing. Two inputs exist and
+ * they are not equivalent:
+ *
+ *   microphone   getUserMedia. Works everywhere, including phones, and hears
+ *                the room — which for a planet sitting on a screen at a party
+ *                is the input you actually want.
+ *   tab audio    getDisplayMedia. Desktop Chrome and Edge only, and only for a
+ *                tab or window the viewer picks. Silent on Safari, absent on
+ *                mobile. Offered where it exists and not pretended elsewhere.
+ *
+ * What the sound is allowed to touch matters. Feed and kill decide whether a
+ * pattern lives at all, and the living band is narrow — so audio never moves
+ * them beyond a small clamped nudge. It drives relief, glow, rotation and the
+ * wind instead, which cannot kill the planet however hard the music goes.
+ */
+const audio = {
+  on: false, source: null, ctx: null, analyser: null, stream: null,
+  data: null, level: 0, bass: 0, treble: 0, beat: 0,
+  history: [], lastBeat: 0,
+};
+
+/** Desktop Chromium can share a tab's sound; nothing else can. */
+const CAN_TAB_AUDIO = typeof navigator !== 'undefined'
+  && !!navigator.mediaDevices?.getDisplayMedia
+  && !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+async function startListening(source){
+  stopListening();
+  try {
+    const stream = source === 'tab'
+      /* Chrome will not hand over audio without a video track being requested
+         too, so one is asked for and dropped immediately. */
+      ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      : await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+
+    if (source === 'tab'){
+      stream.getVideoTracks().forEach(t => t.stop());
+      if (!stream.getAudioTracks().length){
+        stream.getTracks().forEach(t => t.stop());
+        throw new Error('no-audio-track');
+      }
+    }
+
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    useSource(ctx, ctx.createMediaStreamSource(stream), source, stream);
+    /* If the viewer stops the share from the browser's own bar, the page has
+       to notice rather than sit there reading silence. */
+    stream.getAudioTracks().forEach(t => { t.onended = () => { stopListening(); syncAudioUI(); }; });
+  } catch (err){
+    const why = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')
+        ? (source === 'tab' ? 'Share refused. Nothing is listening.'
+                            : 'Microphone refused. Allow it in the address bar to let the planet hear.')
+      : err && err.name === 'NotFoundError' ? 'No microphone on this device.'
+      : err && err.message === 'no-audio-track' ? 'That share carried no sound — tick "share tab audio" and try again.'
+      : 'Could not open that input on this browser.';
+    /* Order matters: syncAudioUI resets the hint to its resting text, so the
+       reason has to be written after it. Getting this backwards made a
+       refused microphone fail in complete silence. */
+    syncAudioUI();
+    audioError(why);
+    return;
+  }
+  syncAudioUI();
+}
+
+/**
+ * Point the analyser at any node. The microphone and the shared tab both come
+ * through here, and so does anything an embedding page wants to supply.
+ */
+function useSource(ctx, node, label, stream = null){
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.72;
+  node.connect(analyser);
+  Object.assign(audio, {
+    on: true, source: label, ctx, analyser, stream,
+    data: new Uint8Array(analyser.frequencyBinCount),
+    history: [], lastBeat: 0,
+  });
+}
+
+function stopListening(){
+  audio.stream?.getTracks().forEach(t => t.stop());
+  audio.ctx?.close?.();
+  Object.assign(audio, { on: false, source: null, ctx: null, analyser: null,
+    stream: null, data: null, level: 0, bass: 0, treble: 0, beat: 0, history: [] });
+}
+
+/** One read per frame: three bands, and whether the bass just jumped. */
+function readAudio(now){
+  if (!audio.on || !audio.analyser) {
+    audio.level = audio.bass = audio.treble = 0;
+    audio.beat *= 0.9;
+    return;
+  }
+  audio.analyser.getByteFrequencyData(audio.data);
+
+  const rate = audio.ctx.sampleRate;
+  const bin = rate / 2 / audio.data.length;
+  const band = (lo, hi) => {
+    const a = Math.max(0, Math.floor(lo / bin)), b = Math.min(audio.data.length - 1, Math.ceil(hi / bin));
+    let sum = 0;
+    for (let i = a; i <= b; i++) sum += audio.data[i];
+    return sum / ((b - a + 1) * 255);
+  };
+
+  const bass = band(20, 250), mid = band(250, 2000), treble = band(2000, 8000);
+  /* Ease towards the reading rather than snapping to it: an analyser frame is
+     noisy and the planet should breathe, not flicker. */
+  audio.bass += (bass - audio.bass) * 0.35;
+  audio.treble += (treble - audio.treble) * 0.25;
+  audio.level += ((bass * 0.5 + mid * 0.35 + treble * 0.15) - audio.level) * 0.25;
+
+  /* Onset detection against a rolling mean, which adapts to how loud the room
+     is instead of needing a threshold set by hand. */
+  audio.history.push(bass);
+  if (audio.history.length > 43) audio.history.shift();
+  const mean = audio.history.reduce((a, b) => a + b, 0) / audio.history.length;
+  if (bass > mean * 1.35 && bass > 0.12 && now - audio.lastBeat > 190){
+    audio.lastBeat = now;
+    audio.beat = 1;
+  }
+  audio.beat *= 0.86;
+}
+
 /* ---- interface --------------------------------------------------------- */
 const ui = {};
 
@@ -472,6 +626,20 @@ function buildUI(){
       </div>
     </div>
 
+    <div class="group" id="g-sound">
+      <h2>Sound</h2>
+      <div class="meter" aria-hidden="true"><i id="m-level"></i></div>
+      <div class="btn-row" id="listen-row">
+        <button class="btn is-primary" id="b-listen">Listen</button>
+        <button class="btn" id="b-tab">Tab audio</button>
+      </div>
+      <p class="hint mono" id="audio-hint">The planet reacts to the room. Nothing is recorded or sent.</p>
+      <div class="row" style="margin-top:12px">
+        <label for="s-react">Reactivity</label><span class="val" id="v-react"></span>
+        <input type="range" id="s-react" min="0" max="1.5" step="0.01">
+      </div>
+    </div>
+
     <div class="group">
       <h2>Wind</h2>
       <div class="pad-wrap">
@@ -510,6 +678,14 @@ function buildUI(){
     toggle.textContent = hidden ? 'Show' : 'Hide';
   });
   document.body.appendChild(toggle);
+
+  /* A phone opens on the planet rather than on the controls: the sheet covers
+     more than half the screen, and the first thing anyone wants is to see the
+     thing. One tap brings the panel up. */
+  if (window.innerWidth < 720){
+    document.body.classList.add('hidden-ui');
+    toggle.textContent = 'Controls';
+  }
 
   const hud = el('div', { id: 'hud' });
   hud.innerHTML = `<span>Drag to orbit · scroll to zoom</span><span>fps <b id="h-fps">–</b></span>`;
@@ -555,6 +731,18 @@ function buildUI(){
     ui.wire.setAttribute('aria-pressed', String(params.wireframe));
   });
 
+  bindRange('s-react', 'v-react', v => { params.reactivity = v; }, v => v.toFixed(2));
+
+  ui.listen = document.getElementById('b-listen');
+  ui.tab = document.getElementById('b-tab');
+  ui.listen.addEventListener('click', () =>
+    audio.on && audio.source === 'mic' ? (stopListening(), syncAudioUI()) : startListening('mic'));
+  ui.tab.addEventListener('click', () =>
+    audio.on && audio.source === 'tab' ? (stopListening(), syncAudioUI()) : startListening('tab'));
+  /* Not offered where it cannot work, rather than offered and then failing. */
+  if (!CAN_TAB_AUDIO) ui.tab.remove();
+  syncAudioUI();
+
   document.getElementById('b-reseed').addEventListener('click', () => seed());
   document.getElementById('b-png').addEventListener('click', savePNG);
   document.getElementById('b-windreset').addEventListener('click', () => setWind(0, 0));
@@ -575,6 +763,32 @@ function bindRange(id, valId, apply, fmt){
   });
 }
 
+function audioError(message){
+  const hint = document.getElementById('audio-hint');
+  if (!hint) return;
+  const listening = audio.source === 'tab' ? 'Listening to the shared tab.'
+    : audio.source === 'mic' ? 'Listening to the room. Nothing is recorded or sent.'
+    : 'Listening to the audio it was given.';
+  hint.textContent = message || (audio.on ? listening
+    : 'The planet reacts to whatever it can hear. Nothing is recorded or sent.');
+  hint.dataset.state = message ? 'bad' : '';
+}
+
+function syncAudioUI(){
+  if (!ui.listen) return;
+  const micOn = audio.on && audio.source === 'mic';
+  const tabOn = audio.on && audio.source === 'tab';
+  ui.listen.textContent = micOn ? 'Stop' : 'Listen';
+  ui.listen.classList.toggle('is-primary', !audio.on);
+  ui.listen.setAttribute('aria-pressed', String(micOn));
+  if (ui.tab && ui.tab.isConnected){
+    ui.tab.textContent = tabOn ? 'Stop' : 'Tab audio';
+    ui.tab.setAttribute('aria-pressed', String(tabOn));
+  }
+  document.getElementById('g-sound')?.classList.toggle('is-live', audio.on);
+  audioError('');
+}
+
 function bindColor(id, apply){
   const input = document.getElementById(id);
   ui[id] = input;
@@ -590,6 +804,7 @@ function syncUI(){
   set('s-bloom', params.bloomStrength);
   set('s-thresh', params.bloomThreshold);
   set('s-rot', params.rotationSpeed);
+  set('s-react', params.reactivity);
   if (ui.c1) ui.c1.value = params.color1;
   if (ui.c2) ui.c2.value = params.color2;
   if (ui.c3) ui.c3.value = params.color3;
@@ -663,10 +878,12 @@ function drawMap(){
       const kill = KILL_MIN + (x / (w - 1)) * (KILL_MAX - KILL_MIN);
       const v = viabilityAt(feed, kill) / 3;
       const i = (y * w + x) * 4;
-      /* Towards the signal green as the pattern gets stronger. */
-      img.data[i]     = 17 + v * (201 - 17);
-      img.data[i + 1] = 17 + v * (255 - 17);
-      img.data[i + 2] = 17 + v * (54 - 17);
+      /* Towards paper as the pattern gets stronger. The accent is spent on
+         the marker alone, so the band reads as terrain and the point you are
+         standing on is the one green thing on the page. */
+      img.data[i]     = 17 + v * (232 - 17);
+      img.data[i + 1] = 17 + v * (232 - 17);
+      img.data[i + 2] = 17 + v * (226 - 17);
       img.data[i + 3] = 255;
     }
   }
@@ -684,7 +901,7 @@ function drawMap(){
 
   mapCtx.beginPath(); mapCtx.arc(px, py, 7, 0, Math.PI * 2);
   mapCtx.strokeStyle = '#090909'; mapCtx.lineWidth = 3; mapCtx.stroke();
-  mapCtx.fillStyle = '#f7f7ef'; mapCtx.fill();
+  mapCtx.fillStyle = '#c9ff36'; mapCtx.fill();
 
   const v = viabilityAt(params.feed, params.kill);
   document.getElementById('r-feed').textContent = params.feed.toFixed(3);
@@ -694,9 +911,16 @@ function drawMap(){
   life.dataset.state = v < 0.6 ? 'dead' : 'alive';
 }
 
-/* ---- wind pad ---------------------------------------------------------- */
+/* ---- wind pad ----------------------------------------------------------
+ *
+ * The pad's own value is kept here as well as in the uniform, because sound
+ * pushes the uniform around on every beat and the pad has to remain the thing
+ * it settles back to. */
+const wind = { x: 0, y: 0 };
+
 function setWind(x, y){
-  rdMaterial.uniforms.evolutionDirection.value.set(x * 0.5, -y * 0.5);
+  wind.x = x * 0.5; wind.y = -y * 0.5;
+  rdMaterial.uniforms.evolutionDirection.value.set(wind.x, wind.y);
   const dot = document.getElementById('pad-dot');
   if (dot){ dot.style.left = `${50 + x * 42}%`; dot.style.top = `${50 + y * 42}%`; }
 }
@@ -733,19 +957,44 @@ function savePNG(){
 function animate(time){
   requestAnimationFrame(animate);
 
+  readAudio(time);
+  const react = params.reactivity;
+
   if (params.isPlaying){
-    planetMesh.rotation.y += params.rotationSpeed;
+    /* Treble hurries the spin a little; the base speed is still the slider. */
+    planetMesh.rotation.y += params.rotationSpeed * (1 + audio.treble * 2.2 * react);
 
     /* Drift wanders around whatever feed is set now, not around the preset's.
        The original read the preset every frame, which quietly overwrote the
        feed slider and made it look broken whenever drift was on — which was
-       its default. */
-    rdMaterial.uniforms.feed.value = params.drift
-      ? clamp(params.feed + Math.sin(time * 0.0004) * 0.0022, FEED_MIN, FEED_MAX)
-      : params.feed;
+       its default.
+
+       A beat adds a small kick on top, clamped into the living band: sound is
+       never allowed to push the simulation somewhere it dies. */
+    const wobble = params.drift ? Math.sin(time * 0.0004) * 0.0022 : 0;
+    const kick = audio.beat * 0.004 * react;
+    rdMaterial.uniforms.feed.value = clamp(params.feed + wobble + kick, FEED_MIN, FEED_MAX);
+
+    /* A beat also shoves the pattern sideways, which reads as the surface
+       flinching. It decays back to whatever the wind pad is set to. */
+    if (audio.on){
+      const w = rdMaterial.uniforms.evolutionDirection.value;
+      w.x += (wind.x - w.x) * 0.08 + audio.beat * 0.22 * react * (wind.x >= 0 ? 1 : -1);
+      w.y += (wind.y - w.y) * 0.08;
+    }
 
     step(STEPS_PER_FRAME);
   }
+
+  /* Relief swells with the bass and the glow follows the overall level. Both
+     are added to the slider value rather than replacing it, so the controls
+     still mean what they say when the music stops. */
+  displayMaterial.uniforms.u_displacementScale.value =
+    params.displacementScale + audio.bass * 0.10 * react;
+  bloomPass.strength = params.bloomStrength + audio.level * 0.55 * react;
+
+  const meter = document.getElementById('m-level');
+  if (meter) meter.style.transform = `scaleX(${Math.min(1, audio.level * 1.6)})`;
 
   displayMaterial.uniforms.tDiffuse.value = rt1.texture;
   controls.update();
@@ -799,6 +1048,13 @@ window.planetMaker = {
   set: (feed, kill) => { setFeedKill(feed, kill); params.preset = ''; syncUI(); },
   reseed: () => seed(),
   snapshot: savePNG,
+  /** Feed the planet from your own audio graph instead of a microphone. */
+  attach: (ctx, node, label = 'external') => { stopListening(); useSource(ctx, node, label); syncAudioUI(); },
+  listen: () => startListening('mic'),
+  deafen: () => { stopListening(); syncAudioUI(); },
+  hearing: () => ({ on: audio.on, source: audio.source, level: +audio.level.toFixed(3),
+                    bass: +audio.bass.toFixed(3), treble: +audio.treble.toFixed(3),
+                    beat: +audio.beat.toFixed(3) }),
   limits: { FEED_MIN, FEED_MAX, KILL_MIN, KILL_MAX, DIFF_A_MAX },
 };
 

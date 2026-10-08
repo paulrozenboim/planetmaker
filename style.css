@@ -165,7 +165,7 @@ body.hidden-ui #toggle{right:0; border-right:1px solid var(--edge)}
      sliders get a taller hit area than their 3px track suggests. */
   .btn{min-height:44px; font-size:11.5px}
   #toggle{min-height:44px; padding:12px 14px}
-  .row input[type="range"]{height:34px}
+  .row input[type="range"]{height:44px}
   .sw input[type="color"]{height:44px}
   #pad{width:124px; height:124px}
   .group{padding:16px 16px 18px}

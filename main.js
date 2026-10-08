@@ -234,6 +234,8 @@ function init(){
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.setAttribute('role', 'img');
+  renderer.domElement.setAttribute('aria-label', 'A planet whose surface pattern grows by itself from a reaction-diffusion simulation. Drag to turn it.');
   document.getElementById('container').appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -303,7 +305,7 @@ function init(){
 
   seed();
   buildUI();
-  frameCamera();
+  frameCamera(true);
   window.addEventListener('resize', onResize);
 }
 
@@ -316,19 +318,60 @@ function onResize(){
 }
 
 /**
- * Pull the camera back far enough that the planet fits.
+ * Keep the planet whole in whatever part of the screen the panel leaves free.
  *
- * The field of view is vertical, so on a portrait phone the horizontal one is
- * much narrower — at 375 by 812 it spans about 1.6 world units against a
- * planet two units across, and the thing is cropped on both sides. Fitting
- * against whichever field is smaller is what makes it whole on a phone.
+ * The panel is a sidebar on a desktop and a bottom sheet covering 58% of a
+ * phone, so with the camera centred on the full screen the controls sat on
+ * top of the very thing they change. Instead, find the free rectangle, shift
+ * the projection so the planet's centre lands in the middle of it
+ * (setViewOffset), and pull back until the planet fits inside it. The field
+ * of view is vertical, so the fit is against the free rectangle's smaller side
+ * expressed as a share of the screen's height.
+ *
+ * Moves are eased in the loop rather than snapped, so opening the controls
+ * reads as the planet stepping aside. Distance is only written while a move is
+ * running: afterwards scroll-zoom belongs to the visitor again.
  */
-function frameCamera(){
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const framing = { x: 0, y: 0, dist: 3, tx: 0, ty: 0, tdist: 3, until: 0 };
+
+function freeRect(){
+  const W = window.innerWidth, H = window.innerHeight;
+  const panel = document.querySelector('.panel');
+  if (!panel || document.body.classList.contains('hidden-ui')) return { x: 0, y: 0, w: W, h: H };
+  /* Read the panel's size, not its position: mid-slide it is somewhere in
+     between, and the target is where it will settle. */
+  const sheet = window.matchMedia('(max-width:720px)').matches &&
+               !window.matchMedia('(max-width:900px) and (max-height:480px)').matches;
+  if (sheet) return { x: 0, y: 0, w: W, h: Math.max(H - panel.offsetHeight, H * 0.3) };
+  return { x: 0, y: 0, w: Math.max(W - panel.offsetWidth, W * 0.3), h: H };
+}
+
+function frameCamera(instant = false){
+  const W = window.innerWidth, H = window.innerHeight;
+  const r = freeRect();
   const vFov = camera.fov * Math.PI / 180;
-  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+  const share = Math.min(r.w, r.h) / H;            /* the free square, in screen heights */
+  const half = Math.atan(Math.tan(vFov / 2) * share);
   /* A margin over the unit sphere for the relief and the atmosphere. */
-  const distance = 1.32 / Math.sin(Math.min(vFov, hFov) / 2);
-  camera.position.setLength(clamp(distance, controls.minDistance, controls.maxDistance));
+  framing.tdist = clamp(1.32 / Math.sin(half), controls.minDistance, controls.maxDistance);
+  framing.tx = W / 2 - (r.x + r.w / 2);
+  framing.ty = H / 2 - (r.y + r.h / 2);
+  framing.until = performance.now() + 900;
+  if (instant){ framing.x = framing.tx; framing.y = framing.ty; framing.dist = framing.tdist; }
+  applyFraming(instant);
+}
+
+function applyFraming(force){
+  const now = performance.now();
+  if (!force && now > framing.until) return;
+  const k = force || REDUCED_MOTION ? 1 : 0.14;
+  framing.x += (framing.tx - framing.x) * k;
+  framing.y += (framing.ty - framing.y) * k;
+  framing.dist += (framing.tdist - framing.dist) * k;
+  const W = window.innerWidth, H = window.innerHeight;
+  camera.setViewOffset(W, H, framing.x, framing.y, W, H);
+  camera.position.setLength(framing.dist);
   controls.update();
 }
 
@@ -672,10 +715,14 @@ function buildUI(){
   `;
   document.body.appendChild(panel);
 
-  const toggle = el('button', { id: 'toggle' }, 'Hide');
+  /* The panel needs an id so the toggle can say which thing it opens. */
+  panel.id = 'panel';
+  const toggle = el('button', { id: 'toggle', 'aria-controls': 'panel', 'aria-expanded': 'true' }, 'Hide');
   toggle.addEventListener('click', () => {
     const hidden = document.body.classList.toggle('hidden-ui');
-    toggle.textContent = hidden ? 'Show' : 'Hide';
+    toggle.setAttribute('aria-expanded', String(!hidden));
+    toggle.textContent = hidden ? (window.innerWidth < 720 ? 'Controls' : 'Show') : 'Hide';
+    frameCamera();
   });
   document.body.appendChild(toggle);
 
@@ -684,6 +731,7 @@ function buildUI(){
      thing. One tap brings the panel up. */
   if (window.innerWidth < 720){
     document.body.classList.add('hidden-ui');
+    toggle.setAttribute('aria-expanded', 'false');
     toggle.textContent = 'Controls';
   }
 
@@ -997,6 +1045,7 @@ function animate(time){
   if (meter) meter.style.transform = `scaleX(${Math.min(1, audio.level * 1.6)})`;
 
   displayMaterial.uniforms.tDiffuse.value = rt1.texture;
+  applyFraming();
   controls.update();
   renderer.setRenderTarget(null);
   composer.render();
